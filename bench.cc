@@ -1,18 +1,18 @@
 #include <benchmark/benchmark.h>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <string>
 #include <unordered_map>
 
 #include "custom_map.hpp"
 
-#define ROWS_TO_READ 1'000'000 // read 1M rows for now
 #define PREALLOC_SLOTS 10'000
 
 using u64 = uint64_t;
 
 std::vector<std::string> lines;
-void LoadLines() {
+void LoadLines(size_t ROWS_TO_READ = 1'000'000) {
     std::ifstream file("/home/sbhusal/temp/1brc/solutions/measurements.txt");
     std::string line;
     int linecount = 0;
@@ -54,7 +54,10 @@ void test_custom_map(benchmark::State &state) {
 }
 
 int main(int argc, char **argv) {
-    LoadLines();
+    if (argc > 1) {
+        LoadLines(atoi(argv[1]));
+    }
+
     benchmark::Initialize(&argc, argv);
     benchmark::RegisterBenchmark("TestStdMap", test_stdmap);
     benchmark::RegisterBenchmark("TestMyMap", test_custom_map);

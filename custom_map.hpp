@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 template <typename K, typename V> struct Slot {
+    size_t hash = 0;
     size_t psl = 0;
     bool occupied = false;
     K key;
@@ -47,10 +48,11 @@ template <typename K, typename V, const size_t __min_slots = 1> class MyMap {
                 slots[bucket].key = key;
                 slots[bucket].value = value;
                 slots[bucket].psl = vpsl;
+                slots[bucket].hash = hash;
                 return;
             }
 
-            if (slots[bucket].key == key) {
+            if (slots[bucket].hash == hash && slots[bucket].key == key) {
                 slots[bucket].value = value;
                 return;
             }
@@ -59,6 +61,7 @@ template <typename K, typename V, const size_t __min_slots = 1> class MyMap {
                 std::swap(current_key, slots[bucket].key);
                 std::swap(current_value, slots[bucket].value);
                 std::swap(vpsl, slots[bucket].psl);
+                std::swap(hash, slots[bucket].hash);
             }
 
             vpsl += 1;
