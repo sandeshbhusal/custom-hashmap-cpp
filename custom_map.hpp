@@ -40,7 +40,7 @@ template <typename K, typename V, const size_t __min_slots = 1> class MyMap {
             if (!slots[bucket].occupied)
                 return slots[bucket];
             auto &candidate = slots[bucket];
-            if (candidate.key.size() == key.size() && candidate.key == key)
+            if (candidate.key == key)
                 return candidate;
             count += 1;
             bucket = (bucket + 1) & (capacity() - 1);
