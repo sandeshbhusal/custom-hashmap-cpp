@@ -49,8 +49,8 @@ template <typename K, typename V, const size_t __min_slots = 1> class MyMap {
 
             if (slot.fingerprint == 0) {
                 slot.fingerprint = fingerprint | 1;
-                slot.key = key;
-                slot.value = value;
+                slot.key = std::move(key);
+                slot.value = std::move(value);
                 return;
             }
 
