@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 template <typename K, typename V> struct Slot {
+    size_t psl = 0;
     bool occupied = false;
     K key;
     V value;
@@ -32,28 +33,39 @@ template <typename K, typename V, const size_t __min_slots = 1> class MyMap {
     }
 
   public:
-    inline Slot<K, V> &find_slot(const K &key) {
+    inline void insert(const K &key, V value) {
         size_t hash = std::hash<K>{}(key);
         size_t bucket = hash & (capacity() - 1);
-        size_t count = 0;
-        while (count < capacity()) {
-            if (!slots[bucket].occupied)
-                return slots[bucket];
-            auto &candidate = slots[bucket];
-            if (candidate.key == key)
-                return candidate;
-            count += 1;
+        size_t vpsl = 0;
+
+        K current_key = key;
+        V current_value = value;
+
+        while (true) {
+            if (!slots[bucket].occupied) {
+                slots[bucket].occupied = true;
+                slots[bucket].key = key;
+                slots[bucket].value = value;
+                slots[bucket].psl = vpsl;
+                return;
+            }
+
+            if (slots[bucket].key == key) {
+                slots[bucket].value = value;
+                return;
+            }
+
+            if (vpsl > slots[bucket].psl) {
+                std::swap(current_key, slots[bucket].key);
+                std::swap(current_value, slots[bucket].value);
+                std::swap(vpsl, slots[bucket].psl);
+            }
+
+            vpsl += 1;
             bucket = (bucket + 1) & (capacity() - 1);
         }
 
         throw std::runtime_error("Hashmap is full");
-    }
-
-    void insert(const K& key, V value) {
-        Slot<K, V> &slot = find_slot(key);
-        slot.value = value;
-        slot.key = key;
-        slot.occupied = true;
     }
 };
 
