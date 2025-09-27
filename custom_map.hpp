@@ -49,7 +49,7 @@ template <typename K, typename V, const size_t __min_slots = 1> class MyMap {
         throw std::runtime_error("Hashmap is full");
     }
 
-    void insert(K key, V value) {
+    void insert(const K& key, V value) {
         Slot<K, V> &slot = find_slot(key);
         slot.value = value;
         slot.key = key;
