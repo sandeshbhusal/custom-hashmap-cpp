@@ -41,7 +41,7 @@ template <typename K, typename V, const size_t __min_slots = 1> class MyMap {
   public:
     __attribute__((noinline)) void insert(const K &key, V value) noexcept {
         size_t hash = std::hash<K>{}(key);
-        size_t fingerprint = hash; // cheap tag
+        size_t fingerprint = hash;
         fingerprint &= ~static_cast<uint64_t>(1);
 
         size_t bucket = hash & (capacity() - 1);
