@@ -1,0 +1,263 @@
+diff --git a/bench.cc b/bench.cc
+index 448762a..bbef3a2 100644
+--- a/bench.cc
++++ b/bench.cc
+@@ -6,7 +6,7 @@
+ 
+ #include "custom_map.hpp"
+ 
+-#define ROWS_TO_READ 1'000'000 // read 1M rows for now
++#define ROWS_TO_READ 100'000'000 // read 1M rows for now
+ #define PREALLOC_SLOTS 10'000
+ 
+ using u64 = uint64_t;
+@@ -41,7 +41,7 @@ void test_stdmap(benchmark::State &state) {
+ }
+ 
+ void test_custom_map(benchmark::State &state) {
+-    MyMap<std::string, u64, PREALLOC_SLOTS> my_map;
++    MyMap<std::string, u64, FNV1aHasher> my_map;
+     for (auto _ : state) {
+         int off = 0;
+         for (const auto &city : lines) {
+diff --git a/custom_map.hpp b/custom_map.hpp
+index 94ebfff..ae1b670 100644
+--- a/custom_map.hpp
++++ b/custom_map.hpp
+@@ -1,95 +1,161 @@
+-#ifndef CUSTOM_MAP
+-#define CUSTOM_MAP
++#ifndef CUSTOM_MAP_HPP
++#define CUSTOM_MAP_HPP
+ 
+-#include <functional>
+-#include <stdexcept>
+-#include <utility> // Required for std::swap, std::move, std::forward
++#include <string>
++#include <vector>
++#include <cstdint>
++#include <utility>
+ 
+-template <typename K, typename V> struct Slot {
+-    size_t psl = 0;
+-    size_t hash = 0;
+-    bool occupied = false;
++// Required for SSE2/SSSE3 intrinsics for our 16-way SIMD search
++#include <nmmintrin.h>
++
++// --- Helper for finding the next power of two ---
++static inline size_t next_power_of_two(size_t n) {
++    if (n == 0) return 1;
++    n--;
++    n |= n >> 1;
++    n |= n >> 2;
++    n |= n >> 4;
++    n |= n >> 8;
++    n |= n >> 16;
++    n |= n >> 32;
++    return n + 1;
++}
++
++// --- The Hasher from our previous discussion ---
++struct FNV1aHasher {
++    static constexpr uint64_t FNV_PRIME = 0x100000001b3;
++    static constexpr uint64_t FNV_OFFSET_BASIS = 0xcbf29ce484222325;
++    size_t operator()(const std::string& key) const {
++        uint64_t hash = FNV_OFFSET_BASIS;
++        for (const char& c : key) {
++            hash ^= static_cast<uint64_t>(c);
++            hash *= FNV_PRIME;
++        }
++        return static_cast<size_t>(hash);
++    }
++};
++
++template <typename K, typename V>
++struct KeyValue {
+     K key;
+     V value;
+ };
+ 
+-// This helper function is already efficient and correct.
+-static inline constexpr size_t nearest_power_of_two(size_t number) {
+-    number--;
+-    number |= number >> 1;
+-    number |= number >> 2;
+-    number |= number >> 4;
+-    number |= number >> 8;
+-    number |= number >> 16;
+-    number |= number >> 32;
+-    number++;
+-    return number;
+-}
++// --- Control Byte Meanings ---
++// We use special values for empty and deleted slots.
++// Any other value is a 7-bit piece of the hash code (h2).
++static constexpr int8_t CTRL_EMPTY = 0b10000000;   // -128
++static constexpr int8_t CTRL_DELETED = 0b10000001; // -127
+ 
+-template <typename K, typename V, const size_t __min_slots = 1> class MyMap {
++template <typename K, typename V, typename Hasher = FNV1aHasher>
++class MyMap {
+ private:
+-    Slot<K, V> slots[nearest_power_of_two(__min_slots)];
++    std::vector<int8_t> ctrl;
++    std::vector<KeyValue<K, V>> slots;
++    size_t num_elements = 0;
++    size_t capacity_mask = 0;
++    Hasher hasher;
+ 
+-    constexpr size_t capacity() const {
+-        return nearest_power_of_two(__min_slots);
+-    }
++    // --- Core SIMD lookup function ---
++    // Finds the index of a key or the first empty slot.
++    size_t find_first(const K& key, size_t hash) const {
++        // Use top 7 bits of hash for a quick check
++        int8_t h2 = hash >> 57; 
++        
++        // Use remaining bits to find the starting bucket
++        size_t bucket = hash & capacity_mask;
++        
++        // Create a SIMD register full of the h2 value we're looking for
++        const __m128i h2_broadcast = _mm_set1_epi8(h2);
+ 
+-public:
+-    /**
+-     * @brief Inserts a key-value pair, using move semantics to reduce copies.
+-     *
+-     * @tparam Val The type of the value, allowing for perfect forwarding.
+-     * @param key The key to insert. Passed by const reference.
+-     * @param value The value to insert. Passed by forwarding reference.
+-     */
+-    template <typename Val>
+-    void insert(const K &key, Val &&value) {
+-        size_t hash = std::hash<K>{}(key);
+-        size_t bucket = hash & (capacity() - 1);
+-        size_t vpsl = 0;
+-
+-        // Create local copies of the key and value to be inserted.
+-        // std::forward ensures that if 'value' is an r-value (e.g., a temporary),
+-        // it will be moved from. If it's an l-value, it will be copied.
+-        K current_key = key;
+-        V current_value = std::forward<Val>(value);
+-
+-        while (true) {
+-            if (!slots[bucket].occupied) {
+-                // Empty slot found. Move our items into place and finish.
+-                slots[bucket].occupied = true;
+-                slots[bucket].key = std::move(current_key);
+-                slots[bucket].value = std::move(current_value);
+-                slots[bucket].psl = vpsl;
+-                slots[bucket].hash = hash;
+-                return;
++        for (;;) {
++            // Load 16 control bytes from the current position
++            const __m128i ctrl_group = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&ctrl[bucket]));
++            
++            // Compare all 16 control bytes with h2 in parallel
++            const __m128i match_mask_vec = _mm_cmpeq_epi8(h2_broadcast, ctrl_group);
++
++            // Convert the SIMD result into a 16-bit integer bitmask
++            int match_mask = _mm_movemask_epi8(match_mask_vec);
++
++            // Check the bitmask for potential matches
++            while (match_mask > 0) {
++                int bit_pos = __builtin_ctz(match_mask); // Find position of the first '1' bit
++                size_t index = bucket + bit_pos;
++                
++                // If hashes match, we must do the final, expensive key comparison
++                if (slots[index].key == key) {
++                    return index; // Found the key
++                }
++                
++                match_mask &= match_mask - 1; // Clear the found bit and continue
+             }
+ 
+-            if (slots[bucket].hash == hash && slots[bucket].key == key) {
+-                // Key already exists. Update the value and finish.
+-                // Move from our current_value since we're done with it.
+-                slots[bucket].value = std::move(current_value);
+-                return;
++            // After checking for our key, we also check for an empty slot in the same group
++            const __m128i empty_mask_vec = _mm_cmpeq_epi8(_mm_set1_epi8(CTRL_EMPTY), ctrl_group);
++            int empty_mask = _mm_movemask_epi8(empty_mask_vec);
++
++            if (empty_mask > 0) {
++                return bucket + __builtin_ctz(empty_mask); // Found an empty slot
+             }
+ 
+-            // If the item to insert is "richer" (further from its ideal slot)
+-            // than the item in the current bucket, swap them.
+-            if (vpsl > slots[bucket].psl) {
+-                std::swap(current_key, slots[bucket].key);
+-                std::swap(current_value, slots[bucket].value);
+-                std::swap(vpsl, slots[bucket].psl);
+-                std::swap(hash, slots[bucket].hash);
++            // No match and no empty slot in this group of 16, so probe to the next group
++            bucket = (bucket + 16) & capacity_mask;
++        }
++    }
++
++    void resize() {
++        size_t old_capacity = slots.size();
++        size_t new_capacity = (old_capacity == 0) ? 16 : old_capacity * 2;
++        
++        std::vector<int8_t> old_ctrl = std::move(ctrl);
++        std::vector<KeyValue<K, V>> old_slots = std::move(slots);
++        
++        ctrl.assign(new_capacity, CTRL_EMPTY);
++        slots.resize(new_capacity);
++        capacity_mask = new_capacity - 1;
++        num_elements = 0;
++
++        for (size_t i = 0; i < old_capacity; ++i) {
++            if (old_ctrl[i] >= 0) { // If the slot was occupied
++                insert(std::move(old_slots[i].key), std::move(old_slots[i].value));
+             }
++        }
++    }
++
++public:
++    MyMap() {
++        resize();
++    }
+ 
+-            // Move to the next bucket.
+-            vpsl += 1;
+-            bucket = (bucket + 1) & (capacity() - 1);
++    template <typename Val>
++    void insert(K&& key, Val&& value) {
++        // Check load factor and resize if necessary. 0.875 is a common threshold.
++        if (num_elements * 8 > slots.size() * 7) {
++            resize();
+         }
+ 
+-        // This line is now unreachable in a loop that never terminates,
+-        // but it's good practice for illustrating the map-full condition.
+-        throw std::runtime_error("Hashmap is full");
++        size_t hash = hasher(key);
++        size_t index = find_first(key, hash);
++
++        // If the slot is empty, this is a new insertion
++        if (ctrl[index] < 0) { 
++            num_elements++;
++            ctrl[index] = hash >> 57; // Store the 7-bit h2
++            slots[index].key = std::forward<K>(key);
++            slots[index].value = std::forward<Val>(value);
++        } else { // The key was found, so this is an update
++            slots[index].value = std::forward<Val>(value);
++        }
++    }
++    
++    // Overload to accept l-value keys
++    template <typename Val>
++    void insert(const K& key, Val&& value) {
++        K key_copy = key;
++        insert(std::move(key_copy), std::forward<Val>(value));
+     }
+ };
+ 
+-#endif
++#endif // CUSTOM_MAP_HPP
+\ No newline at end of file

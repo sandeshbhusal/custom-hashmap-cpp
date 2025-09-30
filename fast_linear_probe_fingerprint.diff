@@ -1,0 +1,98 @@
+diff --git a/custom_map.hpp b/custom_map.hpp
+index 6f7cdcb..82c2bff 100644
+--- a/custom_map.hpp
++++ b/custom_map.hpp
+@@ -1,16 +1,18 @@
+ #ifndef CUSTOM_MAP
+ #define CUSTOM_MAP
+ 
++#include <cstdint>
+ #include <functional>
+ 
+-template <typename K, typename V> struct Slot {
+-    size_t hash = 0;
+-    size_t psl = 0;
++template <typename K, typename V>
++struct Slot {
++    uint16_t fingerprint = 0;
+     bool occupied = false;
+     K key;
+     V value;
+ };
+ 
++// nearest power of two helper
+ static inline constexpr size_t nearest_power_of_two(size_t number) {
+     number--;
+     number |= number >> 1;
+@@ -23,7 +25,8 @@ static inline constexpr size_t nearest_power_of_two(size_t number) {
+     return number;
+ }
+ 
+-template <typename K, typename V, const size_t __min_slots = 1> class MyMap {
++template <typename K, typename V, const size_t __min_slots = 1>
++class MyMap {
+   private:
+     Slot<K, V> slots[nearest_power_of_two(__min_slots)];
+ 
+@@ -31,37 +34,40 @@ template <typename K, typename V, const size_t __min_slots = 1> class MyMap {
+         return nearest_power_of_two(__min_slots);
+     }
+ 
+-  public:
+-    inline void insert(const K &key, V value) noexcept {
+-        Slot<K, V> to_insert;
+-        to_insert.hash = std::hash<K>{}(key);
+-        to_insert.key = key;
+-        to_insert.value = value;
+-        to_insert.psl = 0;
+-        to_insert.occupied = true;
++    static inline void swap_slot(Slot<K,V>& a, Slot<K,V>& b) noexcept {
++        Slot<K,V> tmp = a;
++        a = b;
++        b = tmp;
++    }
+ 
+-        size_t bucket = to_insert.hash & (capacity() - 1);
++  public:
++    __attribute__((noinline)) void insert(const K &key, V value) noexcept {
++        size_t hash = std::hash<K>{}(key);
++        uint16_t fingerprint = static_cast<uint16_t>(hash >> 48); // cheap tag
+ 
++        size_t bucket = hash & (capacity() - 1);
+         while (true) {
+-            if (!slots[bucket].occupied) {
+-                slots[bucket] = to_insert;
+-                return;
+-            }
++            Slot<K, V>& slot = slots[bucket];
+ 
+-            if (slots[bucket].hash == to_insert.hash &&
+-                slots[bucket].key == to_insert.key) {
+-                slots[bucket].value = value;
++            if (!slot.occupied) {
++                // insert new
++                slot.fingerprint = fingerprint;
++                slot.key = key;
++                slot.value = value;
++                slot.occupied = true;
+                 return;
+             }
+ 
+-            if (to_insert.psl > slots[bucket].psl) {
+-                std::swap(to_insert, slots[bucket]);
++            // quick reject by hash+fingerprint
++            if (slot.fingerprint == fingerprint && slot.key == key) {
++                slot.value = value; // update existing
++                return;
+             }
+ 
+-            to_insert.psl++;
++            // linear probe
+             bucket = (bucket + 1) & (capacity() - 1);
+         }
+     }
+ };
+ 
+-#endif
+\ No newline at end of file
++#endif

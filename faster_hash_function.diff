@@ -1,0 +1,75 @@
+diff --git a/custom_map.hpp b/custom_map.hpp
+index 7ea9f49..3f6b297 100644
+--- a/custom_map.hpp
++++ b/custom_map.hpp
+@@ -1,11 +1,13 @@
+ #ifndef CUSTOM_MAP
+ #define CUSTOM_MAP
+ 
+-#include <functional>
++#include <cstdint>
++#include <cstring>
+ #include <stdexcept>
+ 
+ template <typename K, typename V> struct Slot {
+     size_t psl = 0;
++    size_t hash = 0;
+     bool occupied = false;
+     K key;
+     V value;
+@@ -24,6 +26,25 @@ static inline constexpr size_t nearest_power_of_two(size_t number) {
+     return number;
+ }
+ 
++static inline size_t hash_key(const std::string &city) {
++    size_t len = city.size();
++    size_t h = 0;
++    if (len >= 4) {
++        uint32_t first = 0, last = 0;
++        memcpy(&first, city.data(), 4);
++        memcpy(&last, city.data() + len - 4, 4);
++        h ^= (static_cast<size_t>(first) << 32) | last;
++    } else {
++        for (size_t i = 0; i < len; ++i) {
++            h ^= static_cast<size_t>(city[i]) << (i * 8);
++        }
++    }
++    h ^= (h >> 33);
++    h *= 0xc4ceb9fe1a85ec53ULL;
++    h ^= (h >> 33);
++    return h;
++}
++
+ template <typename K, typename V, const size_t __min_slots = 1> class MyMap {
+   private:
+     Slot<K, V> slots[nearest_power_of_two(__min_slots)];
+@@ -34,7 +55,7 @@ template <typename K, typename V, const size_t __min_slots = 1> class MyMap {
+ 
+   public:
+     inline void insert(const K &key, V value) {
+-        size_t hash = std::hash<K>{}(key);
++        size_t hash = hash_key(key);
+         size_t bucket = hash & (capacity() - 1);
+         size_t vpsl = 0;
+ 
+@@ -47,10 +68,11 @@ template <typename K, typename V, const size_t __min_slots = 1> class MyMap {
+                 slots[bucket].key = key;
+                 slots[bucket].value = value;
+                 slots[bucket].psl = vpsl;
++                slots[bucket].hash = hash;
+                 return;
+             }
+ 
+-            if (slots[bucket].key == key) {
++            if (slots[bucket].hash == hash && slots[bucket].key == key) {
+                 slots[bucket].value = value;
+                 return;
+             }
+@@ -59,6 +81,7 @@ template <typename K, typename V, const size_t __min_slots = 1> class MyMap {
+                 std::swap(current_key, slots[bucket].key);
+                 std::swap(current_value, slots[bucket].value);
+                 std::swap(vpsl, slots[bucket].psl);
++                std::swap(hash, slots[bucket].hash);
+             }
+ 
+             vpsl += 1;
