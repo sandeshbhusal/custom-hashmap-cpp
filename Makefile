@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -O3 -g -fno-pie -no-pie
+CXXFLAGS = -O3 -g -fno-pie -no-pie -DNDEBUG -std=c++20
 LDFLAGS = -lbenchmark
 
 TARGET = bench

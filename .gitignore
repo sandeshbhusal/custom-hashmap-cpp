@@ -1,3 +1,4 @@
 bench
 *.data
 *.data.old
+/1brc
