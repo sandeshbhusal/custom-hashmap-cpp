@@ -13,7 +13,7 @@ using u64 = uint64_t;
 
 std::vector<std::string> lines;
 void LoadLines(size_t ROWS_TO_READ = 1'000'000) {
-    std::ifstream file("../measurements.txt");
+    std::ifstream file("/home/sbhusal/workspace/custom-hashmap-cpp/measurements.txt");
     std::string line;
     int linecount = 0;
     while (std::getline(file, line) && linecount++ < ROWS_TO_READ) {
@@ -52,8 +52,6 @@ void test_baseline(benchmark::State &state) {
 
     benchmark::DoNotOptimize(map);
 }
-
-
 
 int main(int argc, char **argv) {
     if (argc > 1) {
