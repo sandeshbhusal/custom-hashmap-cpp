@@ -1,1 +1,1 @@
-./1brc/data/measurements.txt
+/home/sbhusal/temp/1brc/solutions/measurements.txt

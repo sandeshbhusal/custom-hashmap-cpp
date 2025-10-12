@@ -5,7 +5,10 @@
 #include <string>
 #include <unordered_map>
 
+#include "utils.hpp"
+#include "swiss.hpp"
 #include "baseline.hpp"
+#include "linprobehm.hpp"
 
 #define PREALLOC_SLOTS 10'000
 
@@ -22,6 +25,7 @@ void LoadLines(size_t ROWS_TO_READ = 1'000'000) {
             offset += 1;
         lines.push_back(line.substr(0, offset));
     }
+    std::cout << "Read " << lines.size() << " lines into the buffer\n";
 }
 
 void test_stdmap(benchmark::State &state) {
@@ -41,7 +45,33 @@ void test_stdmap(benchmark::State &state) {
 }
 
 void test_baseline(benchmark::State &state) {
-    HashMap<std::string, uint64_t> map(PREALLOC_SLOTS);
+    LLHashMap<std::string, uint64_t> map(PREALLOC_SLOTS);
+    for (auto _ : state) {
+        int off = 0;
+        for (const auto &city : lines) {
+            off += 1;
+            map.insert(city, off);
+        }
+    }
+
+    benchmark::DoNotOptimize(map);
+}
+
+void test_linprobe(benchmark::State &state) {
+    LinProbeHashMap<std::string, uint64_t> map(PREALLOC_SLOTS);
+    for (auto _ : state) {
+        int off = 0;
+        for (const auto &city : lines) {
+            off += 1;
+            map.insert(city, off);
+        }
+    }
+
+    benchmark::DoNotOptimize(map);
+}
+
+void test_swiss(benchmark::State &state) {
+    SwissHashMap<std::string, uint64_t> map(PREALLOC_SLOTS);
     for (auto _ : state) {
         int off = 0;
         for (const auto &city : lines) {
@@ -61,6 +91,8 @@ int main(int argc, char **argv) {
     benchmark::Initialize(&argc, argv);
     benchmark::RegisterBenchmark("TestStdMap", test_stdmap);
     benchmark::RegisterBenchmark("TestBaseline", test_baseline);
+    benchmark::RegisterBenchmark("TestLinearProbing", test_linprobe);
+    benchmark::RegisterBenchmark("TestSwiss", test_swiss);
     benchmark::RunSpecifiedBenchmarks();
     return 0;
 }

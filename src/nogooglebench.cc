@@ -22,7 +22,7 @@ void LoadLines(size_t ROWS_TO_READ = 1'000'000) {
 }
 
 int test_baseline() {
-    HashMap<std::string, uint64_t> map(PREALLOC_SLOTS);
+    LLHashMap<std::string, uint64_t> map(PREALLOC_SLOTS);
     int off = 0;
     for (const auto &city : lines) {
         off += 1;
