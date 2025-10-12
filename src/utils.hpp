@@ -10,10 +10,10 @@ inline size_t hash_key_fast(const std::string &city) {
     size_t len = city.size();
     size_t h = len;
     if (len >= 4) {
-        uint32_t *first, *last;
-        first = reinterpret_cast<uint32_t*>(const_cast<char*>(city.data()));
-        last = reinterpret_cast<uint32_t*>(const_cast<char*>(city.data() + len - 4));
-        h ^= (static_cast<size_t>(*first) << 32) | *last;
+        uint32_t first, last;
+        std::memcpy(&first, city.data(), sizeof(uint32_t));
+        std::memcpy(&last, city.data() + len - 4, sizeof(uint32_t));
+        h ^= (static_cast<size_t>(first) << 32) | last;
     } else {
         for (size_t i = 0; i < len; ++i) {
             h ^= static_cast<size_t>(city[i]) << (i * 8);
