@@ -1,3 +1,6 @@
 [submodule "1brc"]
 	path = 1brc
 	url = https://github.com/gunnarmorling/1brc
+[submodule "results/FlameGraph"]
+	path = results/FlameGraph
+	url = https://github.com/brendangregg/FlameGraph

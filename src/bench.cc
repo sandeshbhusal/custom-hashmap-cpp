@@ -13,7 +13,7 @@ using u64 = uint64_t;
 
 std::vector<std::string> lines;
 void LoadLines(size_t ROWS_TO_READ = 1'000'000) {
-    std::ifstream file("/home/sbhusal/workspace/custom-hashmap-cpp/measurements.txt");
+    std::ifstream file("/home/sbhusal/hashmap/measurements.txt");
     std::string line;
     int linecount = 0;
     while (std::getline(file, line) && linecount++ < ROWS_TO_READ) {
@@ -46,7 +46,7 @@ void test_baseline(benchmark::State &state) {
         int off = 0;
         for (const auto &city : lines) {
             off += 1;
-	    map.insert(city, off);
+            map.insert(city, off);
         }
     }
 

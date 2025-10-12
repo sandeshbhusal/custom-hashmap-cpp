@@ -101,35 +101,9 @@ Welp, we're there. We are already faster than stdmap. But there's a lot more to 
 
 ## Profiling
 
-In order to profile the code, I used `perf`. All measurements are done on the biggest workload, i.e. 32768000 lines.
+show a simple flamegraph, showing that a lot of time is being spent in insert's entry.first == key.
+To solve this, tried a few things without much effect:
+- Store a hash in the slot alongside the key
+- Check key length before the string comparison.
 
-```
-Performance counter stats for './build/bench 32768000 --benchmark_filter=TestBaseline':
-
-           2591.49 msec task-clock                       #    0.999 CPUs utilized
-                62      context-switches                 #   23.924 /sec
-                42      cpu-migrations                   #   16.207 /sec
-            542543      page-faults                      #  209.356 K/sec
-       20652537536      instructions                     #    1.52  insn per cycle
-                                                  #    0.21  stalled cycles per insn     (35.70%)
-       13556022973      cycles                           #    5.231 GHz                         (35.74%)
-        4403523394      stalled-cycles-frontend          #   32.48% frontend cycles idle        (35.77%)
-        4372389105      branches                         #    1.687 G/sec                       (35.78%)
-         209661059      branch-misses                    #    4.80% of all branches             (35.79%)
-        8710648078      L1-dcache-loads                  #    3.361 G/sec                       (35.77%)
-         291661279      L1-dcache-load-misses            #    3.35% of all L1-dcache accesses   (35.72%)
-        1440164607      L1-icache-loads                  #  555.728 M/sec                       (35.70%)
-            988414      L1-icache-load-misses            #    0.07% of all L1-icache accesses   (35.68%)
-          47283668      dTLB-loads                       #   18.246 M/sec                       (35.67%)
-           2523791      dTLB-load-misses                 #    5.34% of all dTLB cache accesses  (35.67%)
-             16501      iTLB-loads                       #    6.367 K/sec                       (35.68%)
-            411102      iTLB-load-misses                 # 2491.38% of all iTLB cache accesses  (35.66%)
-          78665738      L1-dcache-prefetches             #   30.355 M/sec                       (35.67%)
-
-       2.593698113 seconds time elapsed
-
-       1.766003000 seconds user
-       0.826533000 seconds sys
-```
-
-This is the perf data I get. From Mike Kulukundis' talk, as he says, first focus on cache and then we can focus on decreasing the instructions' count. At this point, the iTLB performance is horrible. We are missing a lot of the instructions.
+Did not help much - slight improvements, though.
