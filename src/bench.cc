@@ -6,6 +6,8 @@
 #include <unordered_map>
 
 #include "utils.hpp"
+#include "soaprobe.hpp"
+#include "fpprobe.hpp"
 #include "swiss.hpp"
 #include "baseline.hpp"
 #include "linprobehm.hpp"
@@ -70,8 +72,34 @@ void test_linprobe(benchmark::State &state) {
     benchmark::DoNotOptimize(map);
 }
 
+void test_fpprobe(benchmark::State &state) {
+    FPProbeHashMap<std::string, uint64_t> map(PREALLOC_SLOTS);
+    for (auto _ : state) {
+        int off = 0;
+        for (const auto &city : lines) {
+            off += 1;
+            map.insert(city, off);
+        }
+    }
+
+    benchmark::DoNotOptimize(map);
+}
+
 void test_swiss(benchmark::State &state) {
     SwissHashMap<std::string, uint64_t> map(PREALLOC_SLOTS);
+    for (auto _ : state) {
+        int off = 0;
+        for (const auto &city : lines) {
+            off += 1;
+            map.insert(city, off);
+        }
+    }
+
+    benchmark::DoNotOptimize(map);
+}
+
+void test_soaprobe(benchmark::State &state) {
+    SoAProbeHashMap<std::string, uint64_t> map(PREALLOC_SLOTS);
     for (auto _ : state) {
         int off = 0;
         for (const auto &city : lines) {
@@ -92,6 +120,8 @@ int main(int argc, char **argv) {
     benchmark::RegisterBenchmark("TestStdMap", test_stdmap);
     benchmark::RegisterBenchmark("TestBaseline", test_baseline);
     benchmark::RegisterBenchmark("TestLinearProbing", test_linprobe);
+    benchmark::RegisterBenchmark("TestFPProbe", test_fpprobe);
+    benchmark::RegisterBenchmark("TestSoAProbe", test_soaprobe);
     benchmark::RegisterBenchmark("TestSwiss", test_swiss);
     benchmark::RunSpecifiedBenchmarks();
     return 0;
