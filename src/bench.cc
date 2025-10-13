@@ -5,7 +5,6 @@
 #include <string>
 #include <unordered_map>
 
-#include "utils.hpp"
 #include "soaprobe.hpp"
 #include "fpprobe.hpp"
 #include "swiss.hpp"
